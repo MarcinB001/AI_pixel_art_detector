@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="pl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pixel Art: AI czy Czlowiek?</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #eef2f7;
+            color: #333;
+        }
+
+        .container {
+            background-color: #ffffff;
+            padding: 30px 40px;
+            border-radius: 12px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 700px;
+            width: 90%;
+            border: 1px solid #ddd;
+        }
+
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 2em;
+        }
+
+        p {
+            margin-bottom: 25px;
+            color: #555;
+            line-height: 1.5;
+        }
+
+        input[type="file"] {
+            margin-top: 15px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            display: block;
+            width: calc(100% - 22px);
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 25px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 20px;
+            font-size: 1.1em;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        #result {
+            margin-top: 30px;
+            font-size: 1.6em;
+            font-weight: bold;
+            color: #28a745;
+            min-height: 1.6em;
+        }
+
+        #confidence {
+            font-size: 1.2em;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        #error {
+            margin-top: 20px;
+            font-size: 1em;
+            color: #dc3545;
+        }
+
+        #imageContainer {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .image-display {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .image-display img {
+            max-width: 280px;
+            height: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            object-fit: contain;
+            padding: 5px;
+            background-color: #f9f9f9;
+        }
+
+        .image-display p {
+            margin-top: 10px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        #loadingIndicator {
+            display: none;
+            margin-top: 20px;
+            font-size: 1.1em;
+            color: #007bff;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Pixel Art: AI czy Czlowiek?</h1>
+        <p>Wgraj obraz pixel artu, a model AI sprobuje ocenic, czy zostal stworzony przez sztuczna
+            inteligencje, czy przez czlowieka. Dodatkowo zobaczysz, na ktore obszary obrazu model zwrocil najwieksza
+            uwage.</p>
+
+        <input type="file" id="imageUpload" accept="image/jpeg, image/png, image/gif">
+        <button id="predictButton">Przewiduj!</button>
+
+        <div id="loadingIndicator">ladowanie... Prosze czekac.</div>
+
+        <div id="output">
+            <div id="result"></div>
+            <div id="confidence"></div>
+            <div id="error"></div>
+            <div id="imageContainer">
+                <div class="image-display">
+                    <p>Oryginalny obraz</p>
+                    <img id="originalImagePreview" style="display: none;" alt="Original Image">
+                </div>
+                <div class="image-display">
+                    <p>Wizualizacja Grad-CAM</p>
+                    <img id="gradCamImage" style="display: none;" alt="Grad-CAM Visualization">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const imageUpload = document.getElementById('imageUpload');
+        const predictButton = document.getElementById('predictButton');
+        const resultDiv = document.getElementById('result');
+        const confidenceDiv = document.getElementById('confidence');
+        const errorDiv = document.getElementById('error');
+        const originalImagePreview = document.getElementById('originalImagePreview');
+        const gradCamImage = document.getElementById('gradCamImage');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+
+        function resetMessagesAndImages() {
+            resultDiv.textContent = '';
+            confidenceDiv.textContent = '';
+            errorDiv.textContent = '';
+            resultDiv.style.color = '#28a745';
+            gradCamImage.style.display = 'none';
+            gradCamImage.src = '';
+            loadingIndicator.style.display = 'none';
+        }
+
+        imageUpload.addEventListener('change', function (event) {
+            resetMessagesAndImages();
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    originalImagePreview.src = e.target.result;
+                    originalImagePreview.style.display = 'block';
+                }
+                reader.readAsDataURL(file);
+            }
+        });
+
+        predictButton.addEventListener('click', async () => {
+            resetMessagesAndImages();
+            const file = imageUpload.files[0];
+
+            if (!file) {
+                errorDiv.textContent = 'Prosze najpierw wybrac plik obrazu.';
+                return;
+            }
+
+            loadingIndicator.style.display = 'block';
+            predictButton.disabled = true;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch('http://127.0.0.1:8000/predict', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    resultDiv.textContent = `Wynik: ${data.prediction}`;
+                    confidenceDiv.textContent = `Pewnosc: ${(data.confidence * 100).toFixed(2)}%`;
+
+                    if (data.grad_cam_image) {
+                        gradCamImage.src = 'data:image/png;base64,' + data.grad_cam_image;
+                        gradCamImage.style.display = 'block';
+                    } else {
+                        console.warn("Brak obrazu Grad-CAM w odpowiedzi.");
+                    }
+
+                } else {
+                    errorDiv.textContent = `Blad: ${data.detail || 'Nieznany blad serwera.'}`;
+                    resultDiv.style.color = '#dc3545';
+                }
+            } catch (error) {
+                errorDiv.textContent = `Wystapil blad polaczenia z serwerem: ${error.message}`;
+                resultDiv.style.color = '#dc3545';
+                console.error('Blad:', error);
+            } finally {
+                loadingIndicator.style.display = 'none';
+                predictButton.disabled = false;
+            }
+        });
+    </script>
+</body>
+
+</html>
