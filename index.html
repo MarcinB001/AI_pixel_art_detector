@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="pl">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pixel Art: AI czy Czlowiek?</title>
+    <title>Pixel Art: AI or Human?</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -72,8 +72,19 @@
             margin-top: 30px;
             font-size: 1.6em;
             font-weight: bold;
-            color: #28a745;
             min-height: 1.6em;
+        }
+
+        .result-human {
+            color: #28a745;
+        }
+
+        .result-ai {
+            color: #dc3545;
+        }
+
+        .result-uncertain {
+            color: #ffc107;
         }
 
         #confidence {
@@ -129,15 +140,15 @@
 
 <body>
     <div class="container">
-        <h1>Pixel Art: AI czy Czlowiek?</h1>
-        <p>Wgraj obraz pixel artu, a model AI sprobuje ocenic, czy zostal stworzony przez sztuczna
-            inteligencje, czy przez czlowieka. Dodatkowo zobaczysz, na ktore obszary obrazu model zwrocil najwieksza
-            uwage.</p>
+        <h1>Pixel Art: AI or Human?</h1>
+        <p>Upload a pixel art image, and the AI model will try to determine if it was created by an artificial
+            intelligence or a human. You will also see which areas of the image the model paid the most attention to.
+        </p>
 
         <input type="file" id="imageUpload" accept="image/jpeg, image/png, image/gif">
-        <button id="predictButton">Przewiduj!</button>
+        <button id="predictButton">Predict!</button>
 
-        <div id="loadingIndicator">ladowanie... Prosze czekac.</div>
+        <div id="loadingIndicator">Loading... Please wait.</div>
 
         <div id="output">
             <div id="result"></div>
@@ -145,11 +156,11 @@
             <div id="error"></div>
             <div id="imageContainer">
                 <div class="image-display">
-                    <p>Oryginalny obraz</p>
+                    <p>Original Image</p>
                     <img id="originalImagePreview" style="display: none;" alt="Original Image">
                 </div>
                 <div class="image-display">
-                    <p>Wizualizacja Grad-CAM</p>
+                    <p>Grad-CAM Visualization</p>
                     <img id="gradCamImage" style="display: none;" alt="Grad-CAM Visualization">
                 </div>
             </div>
@@ -166,11 +177,13 @@
         const gradCamImage = document.getElementById('gradCamImage');
         const loadingIndicator = document.getElementById('loadingIndicator');
 
+        const CONFIDENCE_THRESHOLD = 0.70;
+
         function resetMessagesAndImages() {
             resultDiv.textContent = '';
             confidenceDiv.textContent = '';
             errorDiv.textContent = '';
-            resultDiv.style.color = '#28a745';
+            resultDiv.classList.remove('result-human', 'result-ai', 'result-uncertain');
             gradCamImage.style.display = 'none';
             gradCamImage.src = '';
             loadingIndicator.style.display = 'none';
@@ -194,7 +207,7 @@
             const file = imageUpload.files[0];
 
             if (!file) {
-                errorDiv.textContent = 'Prosze najpierw wybrac plik obrazu.';
+                errorDiv.textContent = 'Please select an image file first.';
                 return;
             }
 
@@ -205,7 +218,7 @@
             formData.append('file', file);
 
             try {
-                const response = await fetch('http://127.0.0.1:8000/predict', {
+                const response = await fetch('/predict', {
                     method: 'POST',
                     body: formData
                 });
@@ -213,24 +226,40 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    resultDiv.textContent = `Wynik: ${data.prediction}`;
-                    confidenceDiv.textContent = `Pewnosc: ${(data.confidence * 100).toFixed(2)}%`;
+                    const prediction = data.prediction;
+                    const confidence = data.confidence;
+                    const confidencePercent = (confidence * 100).toFixed(2);
+
+                    resultDiv.textContent = `Result: ${prediction}`;
+                    confidenceDiv.textContent = `Confidence: ${confidencePercent}%`;
+
+                    if (confidence > CONFIDENCE_THRESHOLD) {
+                        if (prediction.toLowerCase().includes('human')) {
+                            resultDiv.classList.add('result-human');
+                        } else if (prediction.toLowerCase().includes('ai')) {
+                            resultDiv.classList.add('result-ai');
+                        } else {
+                            resultDiv.classList.add('result-uncertain');
+                        }
+                    } else {
+                        resultDiv.classList.add('result-uncertain');
+                    }
 
                     if (data.grad_cam_image) {
                         gradCamImage.src = 'data:image/png;base64,' + data.grad_cam_image;
                         gradCamImage.style.display = 'block';
                     } else {
-                        console.warn("Brak obrazu Grad-CAM w odpowiedzi.");
+                        console.warn("No Grad-CAM image in response.");
                     }
 
                 } else {
-                    errorDiv.textContent = `Blad: ${data.detail || 'Nieznany blad serwera.'}`;
-                    resultDiv.style.color = '#dc3545';
+                    errorDiv.textContent = `Error: ${data.detail || 'Unknown server error.'}`;
+                    resultDiv.classList.add('result-ai');
                 }
             } catch (error) {
-                errorDiv.textContent = `Wystapil blad polaczenia z serwerem: ${error.message}`;
-                resultDiv.style.color = '#dc3545';
-                console.error('Blad:', error);
+                errorDiv.textContent = `A server connection error occurred: ${error.message}`;
+                resultDiv.classList.add('result-ai');
+                console.error('Error:', error);
             } finally {
                 loadingIndicator.style.display = 'none';
                 predictButton.disabled = false;
